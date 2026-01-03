@@ -17,14 +17,20 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: List changed files
         run: |
           echo "---"
           echo "Files changed:"
           echo "---"
-          FILES=$(git diff-tree --no-commit-id --name-only -r HEAD)
-          COUNT=$(echo "$FILES" | grep -c . || echo 0)
+          FILES=$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null || true)
+          if [ -z "$FILES" ]; then
+            COUNT=0
+          else
+            COUNT=$(echo "$FILES" | wc -l | tr -d ' ')
+          fi
           echo "Total files changed: $COUNT"
           echo "---"
           echo "$FILES" | while read file; do
