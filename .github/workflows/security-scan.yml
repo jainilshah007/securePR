@@ -3,7 +3,7 @@ name: SecurePR Security Scanner
 on:
   push:
     branches:
-      - '**'
+      - main
 
 jobs:
   scan:
@@ -11,20 +11,31 @@ jobs:
     steps:
       - name: Display workflow info
         run: |
+          echo "::group::📋 Workflow Info"
           echo "Hello from SecurePR!"
           echo "Repository: ${{ github.repository }}"
           echo "Branch: ${{ github.ref_name }}"
+          echo "::endgroup::"
 
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
+      - name: Show commit details
+        run: |
+          echo "::group::👤 Commit Author"
+          echo "Author: $(git log -1 --format='%an')"
+          echo "Email: $(git log -1 --format='%ae')"
+          echo "::endgroup::"
+          
+          echo "::group::💬 Commit Message"
+          git log -1 --format='%B'
+          echo "::endgroup::"
+
       - name: List changed files
         run: |
-          echo "---"
-          echo "Files changed:"
-          echo "---"
+          echo "::group::📁 Changed Files"
           FILES=$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null || true)
           if [ -z "$FILES" ]; then
             COUNT=0
@@ -38,4 +49,4 @@ jobs:
               echo "• $file"
             fi
           done
-          echo "---"
+          echo "::endgroup::"
