@@ -22,6 +22,17 @@ jobs:
         with:
           fetch-depth: 2
 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          echo "::group::📦 Installing Dependencies"
+          pip install openai
+          echo "::endgroup::"
+
       - name: Show commit details
         run: |
           echo "::group::👤 Commit Author"
@@ -34,19 +45,81 @@ jobs:
           echo "::endgroup::"
 
       - name: List changed files
+        id: changed-files
         run: |
           echo "::group::📁 Changed Files"
           FILES=$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null || true)
           if [ -z "$FILES" ]; then
-            COUNT=0
+            echo "No files changed in this commit."
+            echo "has_changes=false" >> $GITHUB_OUTPUT
           else
             COUNT=$(echo "$FILES" | wc -l | tr -d ' ')
+            echo "Total files changed: $COUNT"
+            echo "---"
+            echo "$FILES" | while read file; do
+              if [ -n "$file" ]; then
+                echo "• $file"
+              fi
+            done
+            echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
-          echo "Total files changed: $COUNT"
-          echo "---"
-          echo "$FILES" | while read file; do
-            if [ -n "$file" ]; then
-              echo "• $file"
-            fi
-          done
+          echo "::endgroup::"
+
+      - name: Run security analysis
+        if: steps.changed-files.outputs.has_changes == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          echo "::group::🔒 Security Analysis"
+          echo "=========================================="
+          echo "   SecurePR Security Scanner"
+          echo "=========================================="
+          
+          # Check if API key is set
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "::error::OPENAI_API_KEY secret is not set!"
+            echo "Please add your OpenAI API key as a repository secret."
+            echo "Go to: Settings > Secrets and variables > Actions > New repository secret"
+            exit 1
+          fi
+          
+          # Get the diff
+          DIFF=$(git diff HEAD~1 HEAD 2>/dev/null || git show --format="" HEAD)
+          
+          if [ -z "$DIFF" ]; then
+            echo "No diff content to analyze."
+            echo "::endgroup::"
+            exit 0
+          fi
+          
+          echo "Analyzing $(echo "$DIFF" | wc -l | tr -d ' ') lines of changes..."
+          echo ""
+          
+          # Run the security analysis script
+          echo "$DIFF" | python scripts/analyze_security.py
+          RESULT=$?
+          
+          echo "::endgroup::"
+          
+          if [ $RESULT -ne 0 ]; then
+            echo ""
+            echo "::error::Security vulnerabilities detected! Please review the findings above."
+            exit 1
+          fi
+
+      - name: Skip analysis (no changes)
+        if: steps.changed-files.outputs.has_changes != 'true'
+        run: |
+          echo "::notice::No files changed - skipping security analysis."
+
+      - name: Security scan complete
+        if: always()
+        run: |
+          echo "::group::✅ Scan Complete"
+          echo "=========================================="
+          echo "   Security scan finished"
+          echo "=========================================="
+          echo "Repository: ${{ github.repository }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
           echo "::endgroup::"
