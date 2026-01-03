@@ -14,7 +14,7 @@ import random  # VULN: Using random instead of secrets for security
 # VULNERABILITY 1: Hardcoded API Key
 # ============================================
 # CWE-798: Use of Hard-coded Credentials
-API_KEY = "sk-proj-abc123xyz789secretkey"  # VULNERABLE: Hardcoded secret!
+API_KEY = "sk-proj-abc123xyz7dscdc89secretkey"  # VULNERABLE: Hardcoded secret!
 DATABASE_PASSWORD = "admin123"  # VULNERABLE: Hardcoded password!
 
 
