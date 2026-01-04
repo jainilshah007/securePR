@@ -190,13 +190,23 @@ def analyze_with_openai(diff: str) -> dict:
     api_key = os.environ.get('OPENAI_API_KEY')
     if not api_key:
         print("::error::OPENAI_API_KEY environment variable not set.")
+        write_error_results("API key not configured")
         sys.exit(1)
     
+    # Validate diff size (max ~100k chars to avoid token limits)
+    MAX_DIFF_SIZE = 100000
+    if len(diff) > MAX_DIFF_SIZE:
+        print(f"::warning::Diff is too large ({len(diff)} chars). Truncating to {MAX_DIFF_SIZE} chars.")
+        diff = diff[:MAX_DIFF_SIZE] + "\n\n[... truncated due to size ...]"
+    
+    print(f"📊 Sending {len(diff)} chars to OpenAI...")
+    
     client = OpenAI(api_key=api_key)
+    model = "gpt-4o-mini"  # Most reliable and cost-effective
     
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=model,
             messages=[
                 {
                     "role": "system",
@@ -212,6 +222,7 @@ def analyze_with_openai(diff: str) -> dict:
         )
         
         content = response.choices[0].message.content.strip()
+        print(f"✅ Received response ({len(content)} chars)")
         
         # Clean up potential markdown formatting
         if content.startswith("```"):
@@ -221,17 +232,43 @@ def analyze_with_openai(diff: str) -> dict:
         return json.loads(content)
         
     except json.JSONDecodeError as e:
-        print(f"::error::Failed to parse response: {e}")
+        print(f"::error::Failed to parse response as JSON: {e}")
+        print(f"Raw response (first 500 chars): {content[:500]}")
+        write_error_results(f"JSON parse error: {str(e)}")
         sys.exit(1)
     except Exception as e:
+        print("=" * 50)
+        print("❌ OpenAI API ERROR")
+        print("=" * 50)
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
+        print(f"Model used: {model}")
+        print(f"Diff length: {len(diff)} chars")
+        print("=" * 50)
+        
         error_msg = str(e).lower()
         if "rate_limit" in error_msg:
             print("::error::OpenAI rate limit exceeded. Try again later.")
-        elif "invalid_api_key" in error_msg:
+        elif "invalid_api_key" in error_msg or "authentication" in error_msg:
             print("::error::Invalid OpenAI API key.")
+        elif "model" in error_msg:
+            print(f"::error::Model '{model}' may not be available. Check API access.")
         else:
             print(f"::error::API error: {e}")
+        
+        write_error_results(str(e))
         sys.exit(1)
+
+
+def write_error_results(error_msg: str):
+    """Write error status to results file for workflow."""
+    try:
+        with open('/tmp/security_results.md', 'w') as f:
+            f.write("STATUS=ERROR\n")
+            f.write("EXIT_CODE=1\n")
+            f.write(f"\n## ❌ Analysis Failed\n\n**Error:** {error_msg}\n")
+    except Exception:
+        pass  # Best effort
 
 
 def filter_by_confidence(results: dict, threshold: int = CONFIDENCE_THRESHOLD) -> dict:
