@@ -86,13 +86,22 @@ jobs:
           echo "   PR #${{ github.event.pull_request.number }}"
           echo "==========================================="
           
-          # Check if API key is set
-          if [ -z "$OPENAI_API_KEY" ]; then
-            echo "::error::OPENAI_API_KEY secret is not set!"
-            echo "Please add your OpenAI API key as a repository secret."
-            echo "Go to: Settings > Secrets and variables > Actions > New repository secret"
+          # Debug: Check if API key is being passed
+          echo "🔑 Checking API key..."
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "✅ API key is set (starts with: ${OPENAI_API_KEY:0:8}...)"
+          else
+            echo "❌ API key is NOT set"
             echo ""
-            echo "Note: For PRs from forks, secrets are not available for security reasons."
+            echo "::error::OPENAI_API_KEY secret is not set!"
+            echo ""
+            echo "Troubleshooting:"
+            echo "1. Go to: Settings > Secrets and variables > Actions"
+            echo "2. Add a new repository secret named: OPENAI_API_KEY"
+            echo "3. Paste your OpenAI API key as the value"
+            echo ""
+            echo "Note: For PRs from forks, secrets are NOT available (GitHub security policy)."
+            echo "If this is a fork PR, the maintainer needs to run the workflow manually."
             exit 1
           fi
           
