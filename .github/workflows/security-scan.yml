@@ -86,38 +86,38 @@ jobs:
           echo "   PR #${{ github.event.pull_request.number }}"
           echo "==========================================="
           
-          # Detect if PR is from a fork
-          if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
-            IS_FORK=true
-            echo "📌 This is a FORK PR"
-          else
-            IS_FORK=false
-            echo "📌 This is a SAME-REPO PR"
-          fi
+          # Debug: Show PR origin info
+          echo ""
+          echo "🔍 Debug - PR Origin:"
+          echo "   github.repository = ${{ github.repository }}"
+          echo "   head.repo.full_name = ${{ github.event.pull_request.head.repo.full_name }}"
+          echo "   head.ref = ${{ github.event.pull_request.head.ref }}"
+          echo ""
           
-          # Debug: Check if API key is being passed
+          # Check API key FIRST
           echo "🔑 Checking API key..."
-          if [ -z "$OPENAI_API_KEY" ]; then
-            if [ "$IS_FORK" = "true" ]; then
-              echo "::warning::OPENAI_API_KEY not available (fork PR). Skipping OpenAI analysis."
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "✅ API key is set (starts with: ${OPENAI_API_KEY:0:8}...)"
+          else
+            # API key not set - determine why
+            echo "❌ API key is NOT set"
+            
+            # Check if this is a fork
+            if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+              echo "📌 This is a FORK PR - secrets not available (expected)"
+              echo "::warning::Skipping OpenAI analysis for fork PR."
               echo "status=SKIPPED" >> $GITHUB_OUTPUT
               echo "has_vulnerabilities=false" >> $GITHUB_OUTPUT
-              echo "::endgroup::"
               
-              # Create results file for post-comment step
               echo "STATUS=SKIPPED" > /tmp/security_results.md
               echo "" >> /tmp/security_results.md
               echo "## ⏭️ Security Analysis Skipped" >> /tmp/security_results.md
-              echo "" >> /tmp/security_results.md
-              echo "This PR is from a **forked repository**." >> /tmp/security_results.md
-              echo "" >> /tmp/security_results.md
-              echo "For security reasons, GitHub does not expose repository secrets to fork PRs." >> /tmp/security_results.md
-              echo "" >> /tmp/security_results.md
-              echo "**Manual review is recommended before merging.**" >> /tmp/security_results.md
+              echo "This PR is from a fork. Manual review recommended." >> /tmp/security_results.md
+              
+              echo "::endgroup::"
               exit 0
             else
-              echo "❌ API key is NOT set"
-              echo ""
+              echo "📌 This is a SAME-REPO PR - secret should be available!"
               echo "::error::OPENAI_API_KEY secret is not set!"
               echo ""
               echo "Troubleshooting:"
@@ -126,8 +126,6 @@ jobs:
               echo "3. Paste your OpenAI API key as the value"
               exit 1
             fi
-          else
-            echo "✅ API key is set (starts with: ${OPENAI_API_KEY:0:8}...)"
           fi
           
           # Get the diff between base and head
