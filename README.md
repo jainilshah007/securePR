@@ -23,9 +23,9 @@ Go to **Settings → Secrets → Actions** and add:
 - Name: `OPENAI_API_KEY`
 - Value: Your OpenAI API key
 
-### 2. Push Code
+### 2. Create a Pull Request
 
-The security scan runs automatically on every push to `main`.
+The security scan runs automatically on every PR to `main`.
 
 ### 3. Check Results
 
@@ -33,31 +33,20 @@ View the scan results in the **Actions** tab. The workflow will fail if critical
 
 ---
 
-## How I Built This (Step-by-Step)
+## How I Built This
 
-### Step 1: Basic Workflow Setup
-Created the GitHub Actions foundation with trigger on push to main, ubuntu-latest runner, and a scan job.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for detailed step-by-step build process.
 
-### Step 2: Display Commit Info
-Added steps to show repository/branch name, commit author/message, and list of changed files using GitHub context variables.
-
-### Step 3: Set Up Python Environment
-Added `actions/setup-python@v4` with Python 3.11 and installed the `openai` package.
-
-### Step 4: Create the Security Analyzer Script
-Built `scripts/analyze_security.py` that accepts git diff as input, sends it to GPT-4 with a security-focused prompt, and formats the output.
-
-### Step 5: Craft the Security Prompt
-Designed a detailed prompt with 8 vulnerability categories, CWE references, analysis guidelines to avoid false positives, and structured JSON output format.
-
-### Step 6: Add Output Formatting
-Created markdown output with summary tables, emoji indicators (🔴🟠🟡🟢), collapsible sections, OWASP/CWE references, and attack scenarios.
-
-### Step 7: Add Caching
-Implemented SHA-256 hash-based caching to skip API calls for already-analyzed diffs.
-
-### Step 8: Add Confidence Filtering
-Added threshold system (≥70% confidence) to reduce false positives.
+**Summary:**
+1. Basic GitHub Actions workflow setup
+2. Commit info display with git commands
+3. Python environment with OpenAI SDK
+4. Security analyzer script with GPT-4
+5. Prompt engineering for vulnerability detection
+6. Markdown output formatting
+7. Caching to reduce API costs
+8. Confidence filtering to reduce false positives
+9. PR trigger with base/head diff comparison
 
 ---
 
@@ -68,6 +57,7 @@ securePR/
 ├── .github/workflows/security-scan.yml   # GitHub Actions workflow
 ├── scripts/analyze_security.py           # Security analyzer script
 ├── test_vulnerable_code.py               # Test file with vulnerabilities
+├── DEVELOPMENT.md                        # Build process documentation
 └── README.md
 ```
 

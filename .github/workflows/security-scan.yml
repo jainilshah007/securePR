@@ -1,26 +1,40 @@
 name: SecurePR Security Scanner
 
 on:
-  push:
-    branches:
-      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Required for posting PR comments
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Display workflow info
+      - name: Display PR info
         run: |
-          echo "::group::📋 Workflow Info"
-          echo "Hello from SecurePR!"
+          echo "::group::📋 Pull Request Info"
+          echo "==========================================="
+          echo "🔢 PR #${{ github.event.pull_request.number }}"
+          echo "📝 ${{ github.event.pull_request.title }}"
+          echo "👤 Author: ${{ github.event.pull_request.user.login }}"
+          echo "🔀 ${{ github.base_ref }} ← ${{ github.head_ref }}"
+          echo "==========================================="
           echo "Repository: ${{ github.repository }}"
-          echo "Branch: ${{ github.ref_name }}"
+          echo "Draft: ${{ github.event.pull_request.draft }}"
           echo "::endgroup::"
 
-      - name: Checkout code
+      - name: Checkout PR code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Fetch base branch
+        run: |
+          git fetch origin ${{ github.base_ref }}:${{ github.base_ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -30,27 +44,22 @@ jobs:
       - name: Install dependencies
         run: |
           echo "::group::📦 Installing Dependencies"
-          pip install openai
+          pip install openai PyGithub
           echo "::endgroup::"
 
-      - name: Show commit details
+      - name: Show PR commits
         run: |
-          echo "::group::👤 Commit Author"
-          echo "Author: $(git log -1 --format='%an')"
-          echo "Email: $(git log -1 --format='%ae')"
-          echo "::endgroup::"
-          
-          echo "::group::💬 Commit Message"
-          git log -1 --format='%B'
+          echo "::group::💬 PR Commits"
+          git log --oneline ${{ github.base_ref }}..${{ github.event.pull_request.head.sha }} | head -20
           echo "::endgroup::"
 
       - name: List changed files
         id: changed-files
         run: |
           echo "::group::📁 Changed Files"
-          FILES=$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null || true)
+          FILES=$(git diff --name-only ${{ github.base_ref }}...${{ github.event.pull_request.head.sha }} 2>/dev/null || true)
           if [ -z "$FILES" ]; then
-            echo "No files changed in this commit."
+            echo "No files changed in this PR."
             echo "has_changes=false" >> $GITHUB_OUTPUT
           else
             COUNT=$(echo "$FILES" | wc -l | tr -d ' ')
@@ -66,60 +75,98 @@ jobs:
           echo "::endgroup::"
 
       - name: Run security analysis
+        id: security-scan
         if: steps.changed-files.outputs.has_changes == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           echo "::group::🔒 Security Analysis"
-          echo "=========================================="
+          echo "==========================================="
           echo "   SecurePR Security Scanner"
-          echo "=========================================="
+          echo "   PR #${{ github.event.pull_request.number }}"
+          echo "==========================================="
           
           # Check if API key is set
           if [ -z "$OPENAI_API_KEY" ]; then
             echo "::error::OPENAI_API_KEY secret is not set!"
             echo "Please add your OpenAI API key as a repository secret."
             echo "Go to: Settings > Secrets and variables > Actions > New repository secret"
+            echo ""
+            echo "Note: For PRs from forks, secrets are not available for security reasons."
             exit 1
           fi
           
-          # Get the diff
-          DIFF=$(git diff HEAD~1 HEAD 2>/dev/null || git show --format="" HEAD)
+          # Get the diff between base and head
+          DIFF=$(git diff ${{ github.base_ref }}...${{ github.event.pull_request.head.sha }} 2>/dev/null)
           
           if [ -z "$DIFF" ]; then
             echo "No diff content to analyze."
             echo "::endgroup::"
+            echo "has_vulnerabilities=false" >> $GITHUB_OUTPUT
             exit 0
           fi
           
           echo "Analyzing $(echo "$DIFF" | wc -l | tr -d ' ') lines of changes..."
+          echo "Base: ${{ github.base_ref }}"
+          echo "Head: ${{ github.head_ref }} (${{ github.event.pull_request.head.sha }})"
           echo ""
           
-          # Run the security analysis script
-          echo "$DIFF" | python scripts/analyze_security.py
+          # Run the security analysis script and capture output
+          echo "$DIFF" | python scripts/analyze_security.py > /tmp/security_results.md 2>&1
           RESULT=$?
+          
+          cat /tmp/security_results.md
           
           echo "::endgroup::"
           
           if [ $RESULT -ne 0 ]; then
-            echo ""
-            echo "::error::Security vulnerabilities detected! Please review the findings above."
-            exit 1
+            echo "has_vulnerabilities=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_vulnerabilities=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Post PR comment
+        if: steps.changed-files.outputs.has_changes == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "::group::💬 Posting PR Comment"
+          
+          VULN_FLAG=""
+          if [ "${{ steps.security-scan.outputs.has_vulnerabilities }}" == "true" ]; then
+            VULN_FLAG="--has-vulnerabilities"
+          fi
+          
+          python scripts/post_pr_comment.py \
+            --repo "${{ github.repository }}" \
+            --pr ${{ github.event.pull_request.number }} \
+            --content-file /tmp/security_results.md \
+            $VULN_FLAG
+          
+          echo "::endgroup::"
+
+      - name: Fail if vulnerabilities found
+        if: steps.security-scan.outputs.has_vulnerabilities == 'true'
+        run: |
+          echo "::error::Security vulnerabilities detected in PR #${{ github.event.pull_request.number }}!"
+          echo "Please review the findings in the PR comment before merging."
+          exit 1
 
       - name: Skip analysis (no changes)
         if: steps.changed-files.outputs.has_changes != 'true'
         run: |
-          echo "::notice::No files changed - skipping security analysis."
+          echo "::notice::No files changed in PR - skipping security analysis."
 
       - name: Security scan complete
         if: always()
         run: |
           echo "::group::✅ Scan Complete"
-          echo "=========================================="
+          echo "==========================================="
           echo "   Security scan finished"
-          echo "=========================================="
-          echo "Repository: ${{ github.repository }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Commit: ${{ github.sha }}"
+          echo "==========================================="
+          echo "PR: #${{ github.event.pull_request.number }}"
+          echo "Title: ${{ github.event.pull_request.title }}"
+          echo "Author: ${{ github.event.pull_request.user.login }}"
+          echo "Base: ${{ github.base_ref }}"
+          echo "Head: ${{ github.head_ref }}"
           echo "::endgroup::"
