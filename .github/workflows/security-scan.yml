@@ -105,24 +105,15 @@ jobs:
               echo "::endgroup::"
               
               # Create results file for post-comment step
-              cat > /tmp/security_results.md <<'EOF'
-STATUS=SKIPPED
-
-## ⏭️ Security Analysis Skipped
-
-This PR is from a **forked repository**.
-
-For security reasons, GitHub does not expose repository secrets to workflows triggered by fork PRs.
-
-**What this means:**
-- AI-powered security analysis could not run
-- Manual review is recommended before merging
-
-**For maintainers:**
-- You can manually trigger the workflow on a trusted branch
-- Or review the code changes yourself
-
-EOF
+              echo "STATUS=SKIPPED" > /tmp/security_results.md
+              echo "" >> /tmp/security_results.md
+              echo "## ⏭️ Security Analysis Skipped" >> /tmp/security_results.md
+              echo "" >> /tmp/security_results.md
+              echo "This PR is from a **forked repository**." >> /tmp/security_results.md
+              echo "" >> /tmp/security_results.md
+              echo "For security reasons, GitHub does not expose repository secrets to fork PRs." >> /tmp/security_results.md
+              echo "" >> /tmp/security_results.md
+              echo "**Manual review is recommended before merging.**" >> /tmp/security_results.md
               exit 0
             else
               echo "❌ API key is NOT set"
