@@ -459,6 +459,28 @@ def print_console_output(results: dict):
     return summary.get('critical', 0) > 0 or summary.get('high', 0) > 0
 
 
+def determine_status(results: dict) -> tuple:
+    """
+    Determine scan status based on severity.
+    Returns: (status, exit_code, emoji, message)
+    - FAIL (exit 1): CRITICAL or HIGH issues
+    - WARN (exit 0): Only MEDIUM or LOW issues  
+    - PASS (exit 0): No issues
+    """
+    summary = results.get('summary', {})
+    critical = summary.get('critical', 0)
+    high = summary.get('high', 0)
+    medium = summary.get('medium', 0)
+    low = summary.get('low', 0)
+    
+    if critical > 0 or high > 0:
+        return ('FAIL', 1, '❌', f'{critical} critical, {high} high severity issues found')
+    elif medium > 0 or low > 0:
+        return ('WARN', 0, '⚠️', f'{medium} medium, {low} low severity issues (review recommended)')
+    else:
+        return ('PASS', 0, '✅', 'No security issues detected')
+
+
 def main():
     """Main entry point."""
     print("🔍 SecurePR Security Analyzer")
@@ -468,6 +490,10 @@ def main():
     
     if not diff.strip():
         print("No changes to analyze.")
+        print("")
+        print("STATUS=PASS")
+        print("EXIT_CODE=0")
+        print("✅ No changes to analyze")
         sys.exit(0)
     
     print(f"Analyzing {len(diff.splitlines())} lines...")
@@ -490,16 +516,23 @@ def main():
     markdown = format_markdown_output(results)
     print(markdown)
     
-    # Check for critical issues
-    has_critical = print_console_output(results)
+    # Print console output
+    print_console_output(results)
     
-    if has_critical:
-        print("❌ Critical/High vulnerabilities found!")
-        sys.exit(1)
-    else:
-        print("✅ No critical vulnerabilities.")
-        sys.exit(0)
+    # Determine status
+    status, exit_code, emoji, message = determine_status(results)
+    
+    # Output status for workflow parsing
+    print("")
+    print("=" * 50)
+    print(f"STATUS={status}")
+    print(f"EXIT_CODE={exit_code}")
+    print(f"{emoji} {message}")
+    print("=" * 50)
+    
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
     main()
+

@@ -86,6 +86,21 @@ Workflow changes:
 - Captures analysis output to `/tmp/security_results.md`
 - Calls `post_pr_comment.py` after analysis
 
+## Step 11: Status Checks
+Added pass/fail status indicators:
+- **PASS** (exit 0): No issues
+- **WARN** (exit 0): Medium/Low only
+- **FAIL** (exit 1): Critical/High issues
+
+Python script changes:
+- Added `determine_status()` function
+- Outputs `STATUS=PASS|WARN|FAIL` for workflow parsing
+
+Workflow changes:
+- Parses STATUS from output
+- Shows emoji summary (✅❌⚠️)
+- Blocks merge if FAIL (with branch protection)
+
 ---
 
 ## Git Commands Reference

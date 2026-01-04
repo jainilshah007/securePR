@@ -117,6 +117,10 @@ jobs:
           
           cat /tmp/security_results.md
           
+          # Parse status from output
+          STATUS=$(grep "^STATUS=" /tmp/security_results.md | cut -d= -f2 || echo "UNKNOWN")
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          
           echo "::endgroup::"
           
           if [ $RESULT -ne 0 ]; then
@@ -154,28 +158,43 @@ jobs:
           echo ""
           echo "📋 Security analysis results are available in the 'Run security analysis' step above."
 
-      - name: Fail if vulnerabilities found
+      - name: Security status summary
+        if: always()
+        run: |
+          echo ""
+          echo "==========================================="
+          echo "   🔒 SECURITY SCAN STATUS"
+          echo "==========================================="
+          
+          STATUS="${{ steps.security-scan.outputs.status }}"
+          
+          if [ "$STATUS" == "FAIL" ]; then
+            echo "❌ FAILED - Critical/High severity issues found"
+            echo ""
+            echo "This PR cannot be merged until security issues are resolved."
+          elif [ "$STATUS" == "WARN" ]; then
+            echo "⚠️ WARNING - Medium/Low severity issues found"
+            echo ""
+            echo "Review recommended but PR can be merged."
+          elif [ "$STATUS" == "PASS" ]; then
+            echo "✅ PASSED - No security issues detected"
+            echo ""
+            echo "This PR is safe to merge from a security perspective."
+          elif [ "${{ steps.changed-files.outputs.has_changes }}" != "true" ]; then
+            echo "⏭️ SKIPPED - No files changed"
+          else
+            echo "❓ UNKNOWN - Status could not be determined"
+          fi
+          
+          echo "==========================================="
+          echo ""
+          echo "PR: #${{ github.event.pull_request.number }}"
+          echo "Title: ${{ github.event.pull_request.title }}"
+          echo "Author: ${{ github.event.pull_request.user.login }}"
+
+      - name: Fail if critical vulnerabilities
         if: steps.security-scan.outputs.has_vulnerabilities == 'true'
         run: |
           echo "::error::Security vulnerabilities detected in PR #${{ github.event.pull_request.number }}!"
           echo "Please review the findings in the PR comment before merging."
           exit 1
-
-      - name: Skip analysis (no changes)
-        if: steps.changed-files.outputs.has_changes != 'true'
-        run: |
-          echo "::notice::No files changed in PR - skipping security analysis."
-
-      - name: Security scan complete
-        if: always()
-        run: |
-          echo "::group::✅ Scan Complete"
-          echo "==========================================="
-          echo "   Security scan finished"
-          echo "==========================================="
-          echo "PR: #${{ github.event.pull_request.number }}"
-          echo "Title: ${{ github.event.pull_request.title }}"
-          echo "Author: ${{ github.event.pull_request.user.login }}"
-          echo "Base: ${{ github.base_ref }}"
-          echo "Head: ${{ github.head_ref }}"
-          echo "::endgroup::"
