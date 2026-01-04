@@ -126,7 +126,9 @@ jobs:
           fi
 
       - name: Post PR comment
+        id: post-comment
         if: steps.changed-files.outputs.has_changes == 'true'
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -144,6 +146,13 @@ jobs:
             $VULN_FLAG
           
           echo "::endgroup::"
+
+      - name: Comment fallback notice
+        if: steps.post-comment.outcome == 'failure'
+        run: |
+          echo "::warning::Unable to post comment (likely a fork PR). Results shown in logs above."
+          echo ""
+          echo "📋 Security analysis results are available in the 'Run security analysis' step above."
 
       - name: Fail if vulnerabilities found
         if: steps.security-scan.outputs.has_vulnerabilities == 'true'
