@@ -143,14 +143,29 @@ jobs:
           echo "Head: ${{ github.head_ref }} (${{ github.event.pull_request.head.sha }})"
           echo ""
           
-          # Run the security analysis script and capture output
-          echo "$DIFF" | python scripts/analyze_security.py > /tmp/security_results.md 2>&1
+          # Run the security analysis script
+          echo "🚀 Starting Python analysis script..."
+          set +e  # Don't exit immediately on error
+          echo "$DIFF" | python scripts/analyze_security.py > /tmp/security_results.md 2> /tmp/security_error.log
           RESULT=$?
+          set -e
           
-          cat /tmp/security_results.md
+          echo "Script exit code: $RESULT"
+          
+          # Show any errors first
+          if [ -s /tmp/security_error.log ]; then
+            echo ""
+            echo "⚠️ STDERR output:"
+            cat /tmp/security_error.log
+            echo ""
+          fi
+          
+          # Show results
+          echo "📋 Script output:"
+          cat /tmp/security_results.md || echo "(no output)"
           
           # Parse status from output
-          STATUS=$(grep "^STATUS=" /tmp/security_results.md | cut -d= -f2 || echo "UNKNOWN")
+          STATUS=$(grep "^STATUS=" /tmp/security_results.md 2>/dev/null | cut -d= -f2 || echo "UNKNOWN")
           echo "status=$STATUS" >> $GITHUB_OUTPUT
           
           echo "::endgroup::"
